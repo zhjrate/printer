@@ -5,6 +5,525 @@
 
 ## 项目开发日志
 
+### 2023/12/3
+
+1、缺纸检测模块（查询方式），中断方式没有实现
+
+```c++
+#include <Arduino.h>
+#include <BLEDevice.h>
+#include <BLE2902.h>
+
+#define LED_PIN 18
+#define KEY_PIN 5
+#define BATTERY_ADC_PIN 34
+#define PAPER_PIN 35
+#define VH_EN_PIN 17
+
+#define ADC_FILTERING_COUNT 10
+
+typedef enum
+{
+  PAPER_STATE_NORMAL = 0,
+  PAPER_STATE_LACK,
+} PAPER_STATE;
+
+PAPER_STATE paper_state = PAPER_STATE_NORMAL;
+
+void read_paper_state(void)
+{
+  if(digitalRead(PAPER_PIN) == LOW)
+  {
+    paper_state = PAPER_STATE_NORMAL;
+    Serial.printf("paper normal\n");
+  }
+  else
+  {
+    paper_state = PAPER_STATE_LACK;
+    Serial.printf("paper lack\n");
+  }
+}
+
+void setup()
+{
+  Serial.begin(9600);
+  Serial.printf("setup\n");
+  // 关闭打印头电源
+  pinMode(VH_EN_PIN, OUTPUT);
+  digitalWrite(VH_EN_PIN, LOW);
+  // 初始化缺纸检测
+  pinMode(PAPER_PIN, INPUT);
+}
+
+
+void loop() 
+{
+  delay(1000);
+  read_paper_state();
+}
+```
+
+2、打印头热敏电阻 温度检测
+
+```c++
+#include <Arduino.h>
+#include <BLEDevice.h>
+#include <BLE2902.h>
+
+#define LED_PIN 18
+#define KEY_PIN 5
+#define BATTERY_ADC_PIN 34
+#define PAPER_PIN 35
+#define VH_EN_PIN 17
+#define TEMP_ADC_PIN 36
+
+#define ADC_FILTERING_COUNT 10
+#define ADC_RESOLUTION_BIT 12
+
+float em_calculate_temperature(float Rx)
+{
+  const float B = 3950;
+  const float R25 = 30000;
+  const float T25 = 25 + 273.15;
+  const float offset = 0.5;
+  float temp = 1 / (log(Rx/R25)/B + 1/T25) - 273.15 + offset;
+  return temp;
+}
+
+float get_temperature(void)
+{
+  const float R1 = 10000;
+  float Vi = (float)analogReadMilliVolts(TEMP_ADC_PIN) * (3.3/4095);
+  float Rx = (Vi*R1) / (3.3-Vi);
+  float temp = em_calculate_temperature(Rx);
+  return temp;
+}
+
+void setup()
+{
+  Serial.begin(9600);
+  Serial.printf("setup\n");
+  // 关闭打印头电源
+  pinMode(VH_EN_PIN, OUTPUT);
+  digitalWrite(VH_EN_PIN, LOW);
+
+  analogReadResolution(ADC_RESOLUTION_BIT);
+}
+
+
+void loop() 
+{
+  delay(1000);
+  float temperature = get_temperature();
+  Serial.printf("temp = %.2f \n", temperature);
+}
+```
+
+3、打印头步进电机驱动
+
+```c++
+#include <Arduino.h>
+#include <BLEDevice.h>
+#include <BLE2902.h>
+#include <Ticker.h>
+
+#define LED_PIN 18
+#define KEY_PIN 5
+#define BATTERY_ADC_PIN 34
+#define PAPER_PIN 35
+#define VH_EN_PIN 17
+#define TEMP_ADC_PIN 36
+//电机引脚
+#define MOTOR_AP_PIN 23
+#define MOTOR_AN_PIN 22
+#define MOTOR_BP_PIN 21
+#define MOTOR_BN_PIN 19
+
+#define ADC_FILTERING_COUNT 10
+#define ADC_RESOLUTION_BIT 12
+#define MOTOR_WAIT_TIME 2
+
+uint8_t motor_table[8][4] =
+{
+  {1, 0, 0, 1},
+  {0, 0, 0, 1},
+  {0, 1, 0, 1},
+  {0, 1, 0, 0},
+  {0, 1, 1, 0},
+  {0, 0, 1, 0},
+  {1, 0, 1, 0},
+  {1, 0, 0, 0}
+};
+
+Ticker motor_timer;
+uint8_t motor_pos = 0;
+
+void motor_init(void)
+{
+  pinMode(MOTOR_AP_PIN, OUTPUT);
+  pinMode(MOTOR_AN_PIN, OUTPUT);
+  pinMode(MOTOR_BP_PIN, OUTPUT);
+  pinMode(MOTOR_BN_PIN, OUTPUT);
+
+  digitalWrite(MOTOR_AP_PIN, 0);
+  digitalWrite(MOTOR_AN_PIN, 0);
+  digitalWrite(MOTOR_BP_PIN, 0);
+  digitalWrite(MOTOR_BN_PIN, 0);
+}
+
+void motor_timer_callback(void)
+{
+  digitalWrite(MOTOR_AP_PIN, motor_table[motor_pos][0]);
+  digitalWrite(MOTOR_AN_PIN, motor_table[motor_pos][1]);
+  digitalWrite(MOTOR_BP_PIN, motor_table[motor_pos][2]);
+  digitalWrite(MOTOR_BN_PIN, motor_table[motor_pos][3]);
+  motor_pos++;
+  if(motor_pos >= 8)
+    motor_pos = 0;
+}
+
+void motor_start(void)
+{
+  if(motor_timer.active() == false)
+  {
+    motor_timer.attach_ms(MOTOR_WAIT_TIME, motor_timer_callback);
+    Serial.printf("motor start now.\n");
+  }
+}
+
+void motor_stop(void)
+{
+  digitalWrite(MOTOR_AP_PIN, 0);
+  digitalWrite(MOTOR_AN_PIN, 0);
+  digitalWrite(MOTOR_BP_PIN, 0);
+  digitalWrite(MOTOR_BN_PIN, 0);
+  if(motor_timer.active())
+  {
+    motor_timer.detach();
+    Serial.printf("motor stop now.\n");
+  }
+}
+
+
+void setup()
+{
+  Serial.begin(9600);
+  Serial.printf("setup\n");
+  // 关闭打印头电源
+  pinMode(VH_EN_PIN, OUTPUT);
+  digitalWrite(VH_EN_PIN, LOW);
+
+  motor_init();
+  motor_start();
+}
+
+
+void loop() 
+{
+
+}
+```
+
+4、打印测试
+
+```c++
+#include <Arduino.h>
+#include <BLEDevice.h>
+#include <BLE2902.h>
+#include <SPI.h>
+
+#define LED_PIN 18
+#define KEY_PIN 5
+#define BATTERY_ADC_PIN 34
+#define PAPER_PIN 35
+#define VH_EN_PIN 17
+#define TEMP_ADC_PIN 36
+// 电机引脚
+#define MOTOR_AP_PIN 23
+#define MOTOR_AN_PIN 22
+#define MOTOR_BP_PIN 21
+#define MOTOR_BN_PIN 19
+
+// SPI引脚
+#define SPI_SCL_PIN 15
+#define SPI_SDA_PIN 13
+
+// 打印头通道
+#define STB1_PIN 26  
+#define STB2_PIN 27  
+#define STB3_PIN 14  
+#define STB4_PIN 32  
+#define STB5_PIN 33  
+#define STB6_PIN 25 
+
+#define ADC_FILTERING_COUNT 10
+#define ADC_RESOLUTION_BIT 12
+#define MOTOR_WAIT_TIME 2
+
+uint8_t motor_table[8][4] =
+{
+  {1, 0, 0, 1},
+  {0, 0, 0, 1},
+  {0, 1, 0, 1},
+  {0, 1, 0, 0},
+  {0, 1, 1, 0},
+  {0, 0, 1, 0},
+  {1, 0, 1, 0},
+  {1, 0, 0, 0}
+};
+
+uint8_t motor_pos = 0;
+
+void motor_init(void)
+{
+  pinMode(MOTOR_AP_PIN, OUTPUT);
+  pinMode(MOTOR_AN_PIN, OUTPUT);
+  pinMode(MOTOR_BP_PIN, OUTPUT);
+  pinMode(MOTOR_BN_PIN, OUTPUT);
+
+  digitalWrite(MOTOR_AP_PIN, 0);
+  digitalWrite(MOTOR_AN_PIN, 0);
+  digitalWrite(MOTOR_BP_PIN, 0);
+  digitalWrite(MOTOR_BN_PIN, 0);
+}
+
+void motor_stop(void)
+{
+  digitalWrite(MOTOR_AP_PIN, 0);
+  digitalWrite(MOTOR_AN_PIN, 0);
+  digitalWrite(MOTOR_BP_PIN, 0);
+  digitalWrite(MOTOR_BN_PIN, 0);
+}
+
+void motor_run_step(uint32_t steps)
+{
+  while(steps)
+  {
+    digitalWrite(MOTOR_AP_PIN, motor_table[motor_pos][0]);
+    digitalWrite(MOTOR_AN_PIN, motor_table[motor_pos][1]);
+    digitalWrite(MOTOR_BP_PIN, motor_table[motor_pos][2]);
+    digitalWrite(MOTOR_BN_PIN, motor_table[motor_pos][3]);
+    delay(MOTOR_WAIT_TIME);
+    motor_pos++;
+    if(motor_pos >= 8)
+      motor_pos = 0;
+    steps--;
+  }
+}
+
+#define SPI_CLK 1000000
+
+// SPI
+SPIClass hspi = SPIClass(HSPI);
+SPISettings printer_spi_settings = SPISettings(SPI_CLK, SPI_MSBFIRST, SPI_MODE0);
+
+void spi_init(void)
+{
+  hspi.begin(SPI_SCL_PIN, 16, SPI_SDA_PIN, -1);
+  hspi.setFrequency(2000000);
+}
+
+void spi_send_buffer(uint8_t* buffer, uint32_t size)
+{
+  hspi.beginTransaction(printer_spi_settings);
+  hspi.transfer(buffer, size);
+  hspi.endTransaction();
+}
+
+// 打印模块
+
+#define LAT_PIN 12
+#define PRINTER_ONELINE_BYTE 48
+#define LAT_TIME 1
+#define PRINT_HEAT_TIME 2500
+#define PRINT_COOL_TIME 200
+
+void set_stb_idle(void)
+{
+  digitalWrite(STB1_PIN, LOW);
+  digitalWrite(STB2_PIN, LOW);
+  digitalWrite(STB3_PIN, LOW);
+  digitalWrite(STB4_PIN, LOW);
+  digitalWrite(STB5_PIN, LOW);
+  digitalWrite(STB6_PIN, LOW);
+}
+
+void printer_init(void)
+{
+  motor_init();
+  // 引脚初始化
+  pinMode(VH_EN_PIN, OUTPUT);
+  pinMode(LAT_PIN, OUTPUT);
+  pinMode(SPI_SCL_PIN, OUTPUT);
+  pinMode(SPI_SDA_PIN, OUTPUT);
+  pinMode(STB1_PIN, OUTPUT);
+  pinMode(STB2_PIN, OUTPUT);
+  pinMode(STB3_PIN, OUTPUT);
+  pinMode(STB4_PIN, OUTPUT);
+  pinMode(STB5_PIN, OUTPUT);
+  pinMode(STB6_PIN, OUTPUT);
+  // 关闭打印头加热通道
+  set_stb_idle();
+  // 关闭打印头电源
+  digitalWrite(VH_EN_PIN, LOW);
+  // 初始化spi
+  spi_init();
+}
+
+void send_oneline_data(uint8_t* data)
+{
+  spi_send_buffer(data, PRINTER_ONELINE_BYTE);
+  digitalWrite(LAT_PIN, LOW);
+  delayMicroseconds(LAT_TIME);
+  digitalWrite(LAT_PIN, HIGH);
+}
+
+void prepare_for_printing(void)
+{
+  set_stb_idle();
+  digitalWrite(LAT_PIN, HIGH);
+  digitalWrite(VH_EN_PIN, HIGH);  // 开启打印头电源
+}
+
+void printing_stop(void)
+{
+  digitalWrite(VH_EN_PIN, LOW);   // 关闭打印头电源
+  set_stb_idle();
+  digitalWrite(LAT_PIN, HIGH);
+}
+
+void stb_run(uint8_t stb_num)
+{
+  switch(stb_num)
+  {
+    case 0:
+      digitalWrite(STB1_PIN, HIGH);
+      delayMicroseconds(PRINT_HEAT_TIME);
+      digitalWrite(STB1_PIN, LOW);
+      delayMicroseconds(PRINT_COOL_TIME);
+      break;
+    case 1:
+      digitalWrite(STB2_PIN, HIGH);
+      delayMicroseconds(PRINT_HEAT_TIME);
+      digitalWrite(STB2_PIN, LOW);
+      delayMicroseconds(PRINT_COOL_TIME);
+      break;
+    case 2:
+      digitalWrite(STB3_PIN, HIGH);
+      delayMicroseconds(PRINT_HEAT_TIME);
+      digitalWrite(STB3_PIN, LOW);
+      delayMicroseconds(PRINT_COOL_TIME);
+      break;
+    case 3:
+      digitalWrite(STB4_PIN, HIGH);
+      delayMicroseconds(PRINT_HEAT_TIME);
+      digitalWrite(STB4_PIN, LOW);
+      delayMicroseconds(PRINT_COOL_TIME);
+      break;
+    case 4:
+      digitalWrite(STB5_PIN, HIGH);
+      delayMicroseconds(PRINT_HEAT_TIME);
+      digitalWrite(STB5_PIN, LOW);
+      delayMicroseconds(PRINT_COOL_TIME);
+      break;
+    case 5:
+      digitalWrite(STB6_PIN, HIGH);
+      delayMicroseconds(PRINT_HEAT_TIME);
+      digitalWrite(STB6_PIN, LOW);
+      delayMicroseconds(PRINT_COOL_TIME);
+      break;
+  }
+}
+
+bool aux_printing_by_single_stb(bool need_stop, uint8_t stb_num)
+{
+  if(need_stop)
+  {
+    motor_stop();
+    printing_stop();
+    return true;
+  }
+  motor_run_step(1);
+  stb_run(stb_num);
+  motor_run_step(3);
+  return false;
+}
+
+void printing_by_single_stb(uint8_t stb_num, uint8_t* buffer, uint32_t length)
+{
+  uint32_t offset = 0;
+  uint8_t* data_ptr = buffer;
+  bool need_stop = false;
+  prepare_for_printing();
+  while(1)
+  {
+    if(offset < length)
+    {
+      send_oneline_data(data_ptr);
+      offset += 48;
+      data_ptr += 48;
+    }
+    else
+      need_stop = true;
+    if(aux_printing_by_single_stb(need_stop, stb_num) == true)
+      break;
+  }
+  motor_run_step(40);
+  motor_stop();
+}
+
+static void setDebugData(uint8_t *print_data)
+{
+    for (uint32_t index = 0; index < 48 * 5; ++index)
+    {
+        //0X55 = 0101 0101 0为白，1为黑
+        print_data[index] = 0x55;
+    }
+}
+
+void testSTB()
+{
+    //每行48byte 1byte=8bit 384bit
+    //48*5=5行
+    uint8_t print_data[48*5];
+    uint32_t print_len;
+    Serial.println("start printing test...");
+    print_len = 48*5;
+    //设置打印的数据内容
+    setDebugData(print_data);
+    //通道0打印5行
+    printing_by_single_stb(0, print_data, print_len);
+    setDebugData(print_data);
+    //通道1打印5行
+    printing_by_single_stb(1, print_data, print_len);
+    setDebugData(print_data);
+    printing_by_single_stb(2, print_data, print_len);
+    setDebugData(print_data);
+    printing_by_single_stb(3, print_data, print_len);
+    setDebugData(print_data);
+    printing_by_single_stb(4, print_data, print_len);
+    setDebugData(print_data);
+    printing_by_single_stb(5, print_data, print_len);
+    Serial.println("test complete.");
+}
+
+void setup()
+{
+  Serial.begin(9600);
+  Serial.printf("setup\n");
+  printer_init();
+}
+
+
+void loop() 
+{
+  delay(5000);
+  testSTB();
+}
+```
+
+
+
 ### 2023/11/29
 
 ---
