@@ -1,13 +1,13 @@
 #include <Arduino.h>
+#include "global/task.h"
 
 void setup()
 {
-  Serial.begin(115200);
-  Serial.printf("setup\n");
+  initialization();
 }
 
 
 void loop() 
 {
-  
+  task_print();
 }

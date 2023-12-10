@@ -21,5 +21,6 @@ void queue_init(void);
 void clear_queue(void);
 void write_oneline_data_to_queue(uint8_t* pdata, size_t length);
 uint8_t* read_oneline_data_from_queue(void);
+size_t get_line_need_to_print(void);
 
 #endif

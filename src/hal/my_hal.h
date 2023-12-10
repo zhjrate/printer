@@ -4,8 +4,8 @@
 #include "adc.h"
 #include "led.h"
 
-void read_paper_state(void);
 bool get_need_report_flag(void);
+void read_all_hal(void);
 
 
 #endif

@@ -1,5 +1,6 @@
 #include "ble.h"
 #include "utils/queue.h"
+#include "printer.h"
 
 BLECharacteristic* pCharacteristic;   // 特征，用于发布数据
 
@@ -53,14 +54,11 @@ class bleCharacteristicCallback : public BLECharacteristicCallbacks
         if(data[0] == 0xA5 && data[1] == 0xA5 && data[2] == 0xA5 && data[3] == 0xA5)
         {
             if(data[4] == 1)
-                ;
-                // set heat density = 30
+                set_heat_density(30);
             else if(data[4] == 2)
-                ;
-                // set heat density = 60
+                set_heat_density(60);
             else
-                ;
-                // set heat density = 100
+                set_heat_density(100);
             return;
         }
         else if(data[0] == 0xA6 && data[1] == 0xA6 && data[2] == 0xA6 && data[3] == 0xA6)
@@ -71,7 +69,7 @@ class bleCharacteristicCallback : public BLECharacteristicCallbacks
     }
     // 将数据写入缓冲区
     write_oneline_data_to_queue(data, length);
-    Serial.println("data write in queue successfully!");
+    Serial.println("data was written in queue successfully!");
   }
 };
 

@@ -58,3 +58,8 @@ uint8_t* read_oneline_data_from_queue(void)
     }
     return NULL;
 }
+
+size_t get_line_need_to_print(void)
+{
+    return ble_read_write_buffer_ptr->line_need_to_print;
+}

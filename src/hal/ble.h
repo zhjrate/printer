@@ -10,6 +10,7 @@
 
 void ble_init(void);
 void ble_report(void);
-
+void set_ble_write_finished(bool finish);
+bool get_ble_write_finished(void);
 
 #endif
