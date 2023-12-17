@@ -5,6 +5,5 @@
 
 uint8_t get_battery_percentage(void);
 float get_temperature(void);
-static float calculate_temperature(float Rx);
 
 #endif

@@ -6,7 +6,6 @@ void setup()
   initialization();
 }
 
-
 void loop() 
 {
   task_print();

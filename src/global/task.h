@@ -6,6 +6,7 @@
 #include "hal/printer.h"
 #include "hal/my_hal.h"
 #include "hal/timer.h"
+#include "hal/button.h"
 #include "utils/queue.h"
 
 void initialization(void);

@@ -3,6 +3,9 @@
 
 #include "global/config.h"
 #include "global/device.h"
+#include "utils/queue.h"
+#include "printer.h"
+#include "led.h"
 #include <BLEDevice.h>
 #include <BLE2902.h>
 

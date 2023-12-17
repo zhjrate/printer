@@ -8,6 +8,7 @@
 #include "timer.h"
 #include "utils/queue.h"
 #include "ble.h"
+#include "led.h"
 
 void set_heat_density(uint8_t density);
 void printer_init(void);
